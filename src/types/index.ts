@@ -274,6 +274,7 @@ export interface RegistroHoras {
   // === Fecha ===
   fecha: Timestamp;
   fechaStr: string;               // formato: YYYY-MM-DD (para queries)
+  periodo: string;                // formato: YYYY-MM (para filtros eficientes sin índices compuestos)
   año: number;
   mes: number;
   semana: number;
@@ -355,6 +356,7 @@ export interface RegistroGasto {
   // === Fecha ===
   fecha: Timestamp;
   fechaStr: string;
+  periodo: string;                // formato: YYYY-MM (para filtros eficientes)
   año: number;
   mes: number;
   

@@ -7,7 +7,10 @@
  *   useHorasUsuario, 
  *   useCrearHoras, 
  *   useUsuariosActivos,
- *   useProyectosActivos 
+ *   useProyectosActivos,
+ *   // Paginación infinita
+ *   useHorasInfinitas,
+ *   flattenHorasPages,
  * } from '@/hooks/queries';
  * 
  * function MiComponente() {
@@ -15,6 +18,10 @@
  *   const { mutate: crear, isPending } = useCrearHoras();
  *   const { data: usuarios } = useUsuariosActivos();
  *   const { data: proyectos } = useProyectosActivos();
+ *   
+ *   // Con paginación infinita
+ *   const { data, fetchNextPage, hasNextPage } = useHorasInfinitas({ usuarioId });
+ *   const horasFlat = flattenHorasPages(data);
  * }
  * ```
  */
@@ -35,6 +42,17 @@ export {
   useRechazarHoras,
   useDevolverHoras,
 } from './useHoras';
+
+// Horas con paginación infinita
+export {
+  horasInfinitasKeys,
+  useHorasInfinitas,
+  useHorasUsuarioInfinitas,
+  useHorasPeriodoInfinitas,
+  useHorasPendientesInfinitas,
+  flattenHorasPages,
+  countLoadedHoras,
+} from './useHorasInfinite';
 
 // Usuarios
 export {
