@@ -26,6 +26,21 @@ yarn-error.log*
 # Env
 .env
 .env*.local
+.env.production
+.env.development
+
+# Secrets - NUNCA subir credenciales
+*secret*
+*credential*
+*private*key*
+serviceAccount*.json
+firebase-adminsdk*.json
+
+# Scripts locales con credenciales
+scripts/*.local.ts
+scripts/create-admin.ts
+scripts/create-user*.ts
+scripts/update-user*.ts
 
 # Vercel
 .vercel
