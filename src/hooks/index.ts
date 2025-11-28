@@ -5,25 +5,26 @@ import { collection, query, where, orderBy, onSnapshot, Timestamp } from 'fireba
 import { db } from '@/lib/firebase/config';
 import { useAuth } from '@/lib/firebase/auth';
 import { RegistroHoras, RegistroGasto, Proyecto, EstadoAprobacion } from '@/types';
-import { PERMISOS_POR_ROL, Permisos } from '@/types/permisos';
+import { PERMISOS_POR_ROL, Permiso, tienePermiso } from '@/types/permisos';
 
 /**
  * Hook para obtener los permisos del usuario actual
  */
-export function usePermisos(): Permisos | null {
+export function usePermisos(): Permiso[] {
   const { userData } = useAuth();
   
-  if (!userData?.rol) return null;
+  if (!userData?.rol) return [];
   
-  return PERMISOS_POR_ROL[userData.rol];
+  return PERMISOS_POR_ROL[userData.rol] || [];
 }
 
 /**
- * Hook para saber si el usuario puede ver una sección
+ * Hook para verificar si el usuario tiene un permiso específico
  */
-export function usePuedeVer(seccion: keyof Permisos['puedeVer']): boolean {
-  const permisos = usePermisos();
-  return permisos?.puedeVer[seccion] ?? false;
+export function useTienePermiso(permiso: Permiso): boolean {
+  const { userData } = useAuth();
+  if (!userData?.rol) return false;
+  return tienePermiso(userData.rol, permiso);
 }
 
 /**
@@ -260,10 +261,11 @@ export function useContadorPendientes() {
   useEffect(() => {
     if (!user || !userData) return;
     
-    const permisos = PERMISOS_POR_ROL[userData.rol];
+    // Verificar si puede aprobar horas usando el nuevo sistema de permisos
+    const puedeAprobarHoras = tienePermiso(userData.rol, 'registros:aprobar_horas_equipo') || 
+                              tienePermiso(userData.rol, 'registros:aprobar_horas_todos');
     
-    // Solo contar si puede aprobar
-    if (permisos.puedeAprobar.horasExtras) {
+    if (puedeAprobarHoras) {
       const qHoras = query(
         collection(db, 'registrosHoras'),
         where('estadoHorasExtras', '==', 'pendiente'),
@@ -281,9 +283,10 @@ export function useContadorPendientes() {
   useEffect(() => {
     if (!user || !userData) return;
     
-    const permisos = PERMISOS_POR_ROL[userData.rol];
+    // Verificar si puede aprobar gastos usando el nuevo sistema de permisos
+    const puedeAprobarGastos = tienePermiso(userData.rol, 'gastos:aprobar_todos');
     
-    if (permisos.puedeAprobar.gastos) {
+    if (puedeAprobarGastos) {
       const qGastos = query(
         collection(db, 'gastos'),
         where('estadoGasto', '==', 'pendiente'),

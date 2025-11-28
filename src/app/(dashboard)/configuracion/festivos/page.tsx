@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Edit, Trash2, X, Loader2, Calendar, CalendarDays } from 'lucide-react';
-import { useFestivos } from '@/hooks/useFirebase';
+import { useFestivos } from '@/hooks/queries/compat';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';

@@ -203,6 +203,21 @@ export interface Tarifa {
 }
 
 /**
+ * Snapshot de tarifa al momento del registro
+ * Se guarda junto con el registro para mantener trazabilidad
+ * y evitar que cambios de tarifa afecten cálculos históricos
+ */
+export interface TarifaSnapshot {
+  tarifaId: string;               // ID de la tarifa original
+  codigo: TipoTarifa;             // Código de la tarifa
+  concepto: string;               // Nombre/concepto
+  importe: number;                // Importe vigente al momento
+  unidad: 'hora' | 'dia' | 'noche' | 'km' | 'unidad';
+  vigenciaDesde: Timestamp;       // Vigencia de la tarifa
+  capturadoAt: Timestamp;         // Momento en que se capturó el snapshot
+}
+
+/**
  * Proyecto / Cliente
  */
 export interface Proyecto {
@@ -274,16 +289,19 @@ export interface RegistroHoras {
   tipoHoraExtra?: 'HORA_EXTRA_LABORABLE' | 'HORA_EXTRA_SABADO' | 'HORA_EXTRA_FESTIVO';
   tarifaHoraExtraAplicada?: number;
   importeHorasExtras: number;
+  tarifaHoraExtraSnapshot?: TarifaSnapshot;  // Snapshot de tarifa al momento del registro
   
   // === Nocturnidad ===
   horasNocturnidad: number;
   tarifaNocturnidadAplicada?: number;
   importeNocturnidad: number;
+  tarifaNocturnidadSnapshot?: TarifaSnapshot;  // Snapshot de tarifa al momento del registro
   
   // === Plus festivo ===
   plusFestivo: boolean;
   tarifaPlusFestivoAplicada?: number;
   importePlusFestivo: number;
+  tarifaPlusFestivoSnapshot?: TarifaSnapshot;  // Snapshot de tarifa al momento del registro
   
   // === Proyecto (opcional) ===
   proyectoId?: string;
@@ -355,10 +373,12 @@ export interface RegistroGasto {
   destino?: string;
   vehiculo?: 'propio' | 'empresa';
   tarifaKmAplicada?: number;
+  tarifaKmSnapshot?: TarifaSnapshot;  // Snapshot de tarifa al momento del registro
   
   // === Dieta (si aplica) ===
   tipoDieta?: 'completa' | 'media';
   tarifaDietaAplicada?: number;
+  tarifaDietaSnapshot?: TarifaSnapshot;  // Snapshot de tarifa al momento del registro
   
   // === Adjuntos ===
   adjuntos: Adjunto[];

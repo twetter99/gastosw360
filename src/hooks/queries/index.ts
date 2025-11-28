@@ -3,27 +3,30 @@
  * 
  * USO:
  * ```tsx
- * import { useHorasUsuario, useCrearHoras, useUsuariosActivos } from '@/hooks/queries';
+ * import { 
+ *   useHorasUsuario, 
+ *   useCrearHoras, 
+ *   useUsuariosActivos,
+ *   useProyectosActivos 
+ * } from '@/hooks/queries';
  * 
  * function MiComponente() {
  *   const { data: horas, isLoading } = useHorasUsuario(userId);
- *   const { mutate: crear } = useCrearHoras();
+ *   const { mutate: crear, isPending } = useCrearHoras();
  *   const { data: usuarios } = useUsuariosActivos();
+ *   const { data: proyectos } = useProyectosActivos();
  * }
  * ```
  */
 
 // Horas
 export {
-  // Query keys (para invalidación manual si es necesario)
   horasKeys,
-  // Queries
   useHoras,
   useHorasUsuario,
   useHorasMes,
   useHorasPendientes,
   useHora,
-  // Mutations
   useCrearHoras,
   useActualizarHoras,
   useEliminarHoras,
@@ -35,9 +38,7 @@ export {
 
 // Usuarios
 export {
-  // Query keys
   usuariosKeys,
-  // Queries
   useUsuarios,
   useUsuariosActivos,
   useUsuariosByRol,
@@ -45,10 +46,70 @@ export {
   useUsuariosEquipo,
   useUsuario,
   useUsuarioByEmail,
-  // Mutations
   useCrearUsuario,
   useActualizarUsuario,
   useEliminarUsuario,
   useDesactivarUsuario,
   useReactivarUsuario,
 } from './useUsuarios';
+
+// Proyectos
+export {
+  proyectosKeys,
+  useProyectos,
+  useProyectosActivos,
+  useProyecto,
+  useCrearProyecto,
+  useActualizarProyecto,
+  useEliminarProyecto,
+  useDesactivarProyecto,
+} from './useProyectos';
+
+// Tarifas
+export {
+  tarifasKeys,
+  useTarifas,
+  useTarifasActivas,
+  useTarifaVigente,
+  useTarifa,
+  useCrearTarifa,
+  useActualizarTarifa,
+  useEliminarTarifa,
+  useDesactivarTarifa,
+} from './useTarifas';
+
+// Festivos
+export {
+  festivosKeys,
+  useFestivos,
+  useFestivosAño,
+  useFestivo,
+  useEsFestivo,
+  useCrearFestivo,
+  useActualizarFestivo,
+  useEliminarFestivo,
+} from './useFestivos';
+
+// Gastos
+export {
+  gastosKeys,
+  useGastos,
+  useGastosUsuario,
+  useGastosMes,
+  useGastosPendientes,
+  useGasto,
+  useCrearGasto,
+  useActualizarGasto,
+  useEliminarGasto,
+  useEnviarGastoAAprobacion,
+  useAprobarGasto,
+  useRechazarGasto,
+} from './useGastos';
+
+// Hooks de compatibilidad (API legacy con React Query)
+export {
+  useUsuariosCompat,
+  useProyectosCompat,
+  useTarifasCompat,
+  useFestivosCompat,
+} from './compat';

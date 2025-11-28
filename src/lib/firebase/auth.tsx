@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { 
   User,
   signInWithEmailAndPassword,
@@ -9,18 +9,31 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db, COLLECTIONS } from './config';
+import { httpsCallable } from 'firebase/functions';
+import { auth, db, functions, COLLECTIONS } from './config';
 import { Usuario, RolUsuario } from '@/types';
+
+// Interfaz para los Custom Claims del token
+export interface CustomClaims {
+  rol?: RolUsuario;
+  equipoId?: string;
+  equipoIds?: string[];
+  esJefeEquipo?: boolean;
+  activo?: boolean;
+}
 
 interface AuthContextType {
   user: User | null;
   userData: Usuario | null;
+  claims: CustomClaims | null;
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  refreshClaims: () => Promise<void>;
   hasRole: (roles: RolUsuario | RolUsuario[]) => boolean;
+  hasClaimRole: (roles: RolUsuario | RolUsuario[]) => boolean;
   isAdmin: boolean;
   isDireccion: boolean;
   isSupervisor: boolean;
@@ -33,8 +46,57 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [userData, setUserData] = useState<Usuario | null>(null);
+  const [claims, setClaims] = useState<CustomClaims | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Función para cargar los claims del token
+  const loadClaims = useCallback(async (firebaseUser: User): Promise<CustomClaims | null> => {
+    try {
+      const tokenResult = await firebaseUser.getIdTokenResult();
+      const customClaims: CustomClaims = {
+        rol: tokenResult.claims.rol as RolUsuario | undefined,
+        equipoId: tokenResult.claims.equipoId as string | undefined,
+        equipoIds: tokenResult.claims.equipoIds as string[] | undefined,
+        esJefeEquipo: tokenResult.claims.esJefeEquipo as boolean | undefined,
+        activo: tokenResult.claims.activo as boolean | undefined,
+      };
+      console.log('Custom claims cargados:', customClaims);
+      return customClaims;
+    } catch (err) {
+      console.error('Error cargando claims:', err);
+      return null;
+    }
+  }, []);
+
+  // Función para refrescar los claims (forzar nuevo token)
+  const refreshClaims = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      // Forzar refresh del token para obtener claims actualizados
+      await user.getIdToken(true);
+      const newClaims = await loadClaims(user);
+      setClaims(newClaims);
+      console.log('Claims refrescados:', newClaims);
+    } catch (err) {
+      console.error('Error refrescando claims:', err);
+    }
+  }, [user, loadClaims]);
+
+  // Función para sincronizar claims desde Firestore (llamar Cloud Function)
+  const syncClaimsFromFirestore = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const syncFunction = httpsCallable(functions, 'syncMyCustomClaims');
+      await syncFunction();
+      // Después de sincronizar, refrescar el token local
+      await refreshClaims();
+    } catch (err) {
+      console.error('Error sincronizando claims:', err);
+    }
+  }, [user, refreshClaims]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -43,6 +105,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(true); // Mantener loading mientras se carga userData
       
       if (firebaseUser) {
+        // Cargar claims del token
+        const userClaims = await loadClaims(firebaseUser);
+        setClaims(userClaims);
+        
+        // Si no hay claims de rol, intentar sincronizar desde Firestore
+        if (!userClaims?.rol) {
+          console.log('No hay claims de rol, sincronizando desde Firestore...');
+          try {
+            const syncFunction = httpsCallable(functions, 'syncMyCustomClaims');
+            await syncFunction();
+            // Refrescar token para obtener nuevos claims
+            await firebaseUser.getIdToken(true);
+            const newClaims = await loadClaims(firebaseUser);
+            setClaims(newClaims);
+          } catch (err) {
+            console.warn('No se pudieron sincronizar claims:', err);
+          }
+        }
+        
         // Cargar datos del usuario desde Firestore
         try {
           console.log('Buscando documento en usuarios/', firebaseUser.uid);
@@ -64,13 +145,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         setUserData(null);
+        setClaims(null);
       }
       
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [loadClaims]);
 
   const signIn = async (email: string, password: string) => {
     setError(null);
@@ -113,20 +195,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return rolesArray.includes(userData.rol);
   };
 
+  // Verificar rol usando Custom Claims (más eficiente, no requiere lectura de Firestore)
+  const hasClaimRole = (roles: RolUsuario | RolUsuario[]): boolean => {
+    if (!claims?.rol) return false;
+    const rolesArray = Array.isArray(roles) ? roles : [roles];
+    return rolesArray.includes(claims.rol);
+  };
+
   const value: AuthContextType = {
     user,
     userData,
+    claims,
     loading,
     error,
     signIn,
     signOut,
     resetPassword,
+    refreshClaims,
     hasRole,
-    isAdmin: userData?.rol === 'admin',
-    isDireccion: hasRole(['direccion', 'admin']),
-    isSupervisor: hasRole(['supervisor_oficina', 'direccion', 'admin']),
-    isJefeEquipo: hasRole(['jefe_equipo', 'direccion', 'admin']),
-    isTecnico: userData?.rol === 'tecnico',
+    hasClaimRole,
+    isAdmin: claims?.rol === 'admin' || userData?.rol === 'admin',
+    isDireccion: hasClaimRole(['direccion', 'admin']) || hasRole(['direccion', 'admin']),
+    isSupervisor: hasClaimRole(['supervisor_oficina', 'direccion', 'admin']) || hasRole(['supervisor_oficina', 'direccion', 'admin']),
+    isJefeEquipo: (claims?.esJefeEquipo ?? false) || hasClaimRole(['jefe_equipo', 'direccion', 'admin']) || hasRole(['jefe_equipo', 'direccion', 'admin']),
+    isTecnico: claims?.rol === 'tecnico' || userData?.rol === 'tecnico',
   };
 
   return (

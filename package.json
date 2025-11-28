@@ -30,6 +30,7 @@
     "@tanstack/react-query-devtools": "^5.91.1",
     "@tanstack/react-table": "^8.15.0",
     "autoprefixer": "^10.4.17",
+    "browser-image-compression": "^2.0.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^2.30.0",

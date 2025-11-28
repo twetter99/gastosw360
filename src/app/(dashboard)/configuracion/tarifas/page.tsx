@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Edit, Trash2, X, Loader2, Euro, Clock, Car } from 'lucide-react';
-import { useTarifas } from '@/hooks/useFirebase';
+import { useTarifas } from '@/hooks/queries/compat';
 import { toast } from 'sonner';
 
 interface TarifaForm {

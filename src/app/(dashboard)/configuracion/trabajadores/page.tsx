@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Search, Edit, Trash2, UserCheck, UserX, X, Loader2, Key, Mail, Eye, EyeOff, RefreshCw, Copy, Check } from 'lucide-react';
-import { useUsuarios } from '@/hooks/useFirebase';
+import { useUsuarios } from '@/hooks/queries/compat';
 import { toast } from 'sonner';
 import { crearUsuarioAuth, generarPasswordTemporal, enviarEmailRestablecimiento } from '@/lib/firebase/admin-auth';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';

@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ============================================================
-    // FUNCIONES HELPER
+    // FUNCIONES HELPER - USANDO CUSTOM CLAIMS (Sin lecturas extra)
     // ============================================================
     
     // Verifica si el usuario está autenticado
@@ -11,31 +11,24 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Obtiene el documento del usuario actual
-    function getUserData() {
-      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    // Obtiene el rol del token (Custom Claim - coste $0, latencia 0)
+    function getRol() {
+      return request.auth.token.rol;
     }
     
-    // Verifica el rol del usuario
+    // Verifica el rol del usuario usando Custom Claims
     function hasRole(role) {
-      return isAuthenticated() && getUserData().rol == role;
+      return isAuthenticated() && getRol() == role;
     }
     
     // Verifica si tiene alguno de los roles
     function hasAnyRole(roles) {
-      return isAuthenticated() && getUserData().rol in roles;
+      return isAuthenticated() && getRol() in roles;
     }
     
     // Verifica si es admin o dirección
     function isAdminOrDireccion() {
       return hasAnyRole(['admin', 'direccion']);
-    }
-    
-    // Verifica si puede aprobar horas de un usuario
-    function canApproveHoursFor(userId) {
-      let userData = getUserData();
-      let targetUser = get(/databases/$(database)/documents/usuarios/$(userId)).data;
-      return userData.id == targetUser.responsableHorasId || isAdminOrDireccion();
     }
     
     // Verifica si puede aprobar gastos
@@ -48,10 +41,36 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     
-    // Verifica si el usuario está en el equipo del jefe
-    function isInMyTeam(userId) {
-      let userData = getUserData();
-      return hasRole('jefe_equipo') && userId in userData.equipoIds;
+    // Verifica si es el aprobador asignado para horas
+    function isHoursApprover(aprobadorId) {
+      return isAuthenticated() && request.auth.uid == aprobadorId;
+    }
+    
+    // ============================================================
+    // VALIDACIÓN DE DATOS - Prevenir inyección de estados
+    // ============================================================
+    
+    // Valida que el estado inicial de horas sea 'borrador'
+    function validarEstadoInicialHoras() {
+      return request.resource.data.estadoHorasExtras == 'borrador';
+    }
+    
+    // Valida que el estado inicial de gastos sea 'borrador'
+    function validarEstadoInicialGastos() {
+      return request.resource.data.estadoGasto == 'borrador';
+    }
+    
+    // Valida que el importe sea un número positivo
+    function validarImporte() {
+      return request.resource.data.importe is number && 
+             request.resource.data.importe >= 0;
+    }
+    
+    // Valida que las horas sean un número válido (0-24)
+    function validarHoras() {
+      return request.resource.data.horasExtras is number && 
+             request.resource.data.horasExtras >= 0 &&
+             request.resource.data.horasExtras <= 24;
     }
     
     // ============================================================
@@ -59,14 +78,25 @@ service cloud.firestore {
     // ============================================================
     
     match /usuarios/{userId} {
-      // Lectura: autenticados pueden leer usuarios activos
+      // Lectura: autenticados pueden leer usuarios
       allow read: if isAuthenticated();
       
-      // Escritura: solo admin puede crear/editar usuarios
-      allow create, update: if hasAnyRole(['admin', 'direccion']);
+      // Crear: solo admin puede crear usuarios
+      allow create: if hasAnyRole(['admin', 'direccion']);
+      
+      // Actualizar: admin puede editar todo, usuario solo perfil básico
+      allow update: if hasAnyRole(['admin', 'direccion']) ||
+        (isOwner(userId) && onlyUpdatingAllowedFields());
       
       // Eliminar: solo admin
       allow delete: if hasRole('admin');
+      
+      // Helper para verificar que solo actualiza campos permitidos
+      function onlyUpdatingAllowedFields() {
+        let allowedFields = ['telefono', 'avatar', 'preferencias'];
+        let changedFields = request.resource.data.diff(resource.data).affectedKeys();
+        return changedFields.hasOnly(allowedFields);
+      }
     }
     
     // ============================================================
@@ -76,27 +106,35 @@ service cloud.firestore {
     match /registrosHoras/{registroId} {
       // Lectura:
       // - Propietario puede ver los suyos
-      // - Jefe de equipo puede ver los de su equipo
-      // - Supervisor/Dirección/Admin pueden ver todos
+      // - Aprobador asignado puede ver
+      // - Jefe de equipo, Supervisor/Dirección/Admin pueden ver todos
       allow read: if isAuthenticated() && (
         isOwner(resource.data.usuarioId) ||
-        isInMyTeam(resource.data.usuarioId) ||
-        isAdminOrDireccion() ||
-        hasRole('supervisor_oficina')
+        isHoursApprover(resource.data.aprobadorHorasId) ||
+        hasAnyRole(['jefe_equipo', 'supervisor_oficina', 'direccion', 'admin'])
       );
       
-      // Crear: cualquier usuario autenticado puede crear sus propios registros
+      // Crear: usuario autenticado puede crear sus propios registros
+      // VALIDACIÓN CRÍTICA: Estado DEBE ser 'borrador', horas válidas
       allow create: if isAuthenticated() && 
-        request.resource.data.usuarioId == request.auth.uid;
+        request.resource.data.usuarioId == request.auth.uid &&
+        validarEstadoInicialHoras() &&
+        validarHoras();
       
       // Actualizar:
-      // - Propietario puede editar si está en borrador
-      // - Aprobador puede aprobar/rechazar
+      // - Propietario puede editar si está en borrador (no puede auto-aprobar)
+      // - Aprobador puede cambiar estado a aprobado/rechazado/devuelto
+      // - Admin puede editar todo
       allow update: if isAuthenticated() && (
-        // Propietario puede editar borradores
-        (isOwner(resource.data.usuarioId) && resource.data.estadoHorasExtras == 'borrador') ||
-        // Aprobador puede cambiar estado
-        canApproveHoursFor(resource.data.usuarioId)
+        // Propietario edita borrador → solo puede pasar a pendiente, no a aprobado
+        (isOwner(resource.data.usuarioId) && 
+         resource.data.estadoHorasExtras == 'borrador' &&
+         request.resource.data.estadoHorasExtras in ['borrador', 'pendiente']) ||
+        // Aprobador asignado puede aprobar/rechazar/devolver
+        (isHoursApprover(resource.data.aprobadorHorasId) &&
+         request.resource.data.estadoHorasExtras in ['aprobado', 'rechazado', 'devuelto']) ||
+        // Admin puede todo
+        isAdminOrDireccion()
       );
       
       // Eliminar: solo propietario si está en borrador
@@ -111,22 +149,32 @@ service cloud.firestore {
     match /gastos/{gastoId} {
       // Lectura:
       // - Propietario puede ver los suyos
-      // - Supervisor/Dirección/Admin pueden ver todos
+      // - Aprobadores de gastos pueden ver todos
       allow read: if isAuthenticated() && (
         isOwner(resource.data.usuarioId) ||
         canApproveExpenses()
       );
       
-      // Crear: cualquier usuario autenticado puede crear sus propios gastos
+      // Crear: usuario autenticado puede crear sus propios gastos
+      // VALIDACIÓN CRÍTICA: Estado DEBE ser 'borrador', importe válido
       allow create: if isAuthenticated() && 
-        request.resource.data.usuarioId == request.auth.uid;
+        request.resource.data.usuarioId == request.auth.uid &&
+        validarEstadoInicialGastos() &&
+        validarImporte();
       
       // Actualizar:
-      // - Propietario puede editar si está en borrador
+      // - Propietario puede editar si está en borrador (no puede auto-aprobar)
       // - Supervisor puede aprobar/rechazar
       allow update: if isAuthenticated() && (
-        (isOwner(resource.data.usuarioId) && resource.data.estadoGasto == 'borrador') ||
-        canApproveExpenses()
+        // Propietario edita borrador → solo puede pasar a pendiente
+        (isOwner(resource.data.usuarioId) && 
+         resource.data.estadoGasto == 'borrador' &&
+         request.resource.data.estadoGasto in ['borrador', 'pendiente']) ||
+        // Aprobadores pueden cambiar estado a aprobado/rechazado/devuelto
+        (canApproveExpenses() &&
+         request.resource.data.estadoGasto in ['aprobado', 'rechazado', 'devuelto']) ||
+        // Admin puede todo
+        isAdminOrDireccion()
       );
       
       // Eliminar: solo propietario si está en borrador
@@ -183,10 +231,8 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         // Propietario puede ver su resumen
         resource.data.usuarioId == request.auth.uid ||
-        // Jefe puede ver resúmenes de su equipo
-        isInMyTeam(resource.data.usuarioId) ||
         // Supervisor/Dirección/Admin pueden ver todos
-        hasAnyRole(['supervisor_oficina', 'direccion', 'admin'])
+        hasAnyRole(['jefe_equipo', 'supervisor_oficina', 'direccion', 'admin'])
       );
       
       // Solo Cloud Functions puede escribir

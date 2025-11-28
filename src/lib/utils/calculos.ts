@@ -1,4 +1,5 @@
-import { Tarifa, TipoDia, TipoTarifa, TipoHora } from '@/types';
+import { Tarifa, TipoDia, TipoTarifa, TipoHora, TarifaSnapshot } from '@/types';
+import { Timestamp } from 'firebase/firestore';
 
 /**
  * Determina el tipo de tarifa de hora extra según el tipo de día
@@ -360,5 +361,188 @@ export function calcularResumenMensual(
     importeTotalGastos,
     
     importeTotalMes: importeTotalHoras + importeTotalGastos,
+  };
+}
+
+// ============================================================
+// SISTEMA DE SNAPSHOTS DE TARIFAS
+// ============================================================
+
+/**
+ * Crea un snapshot inmutable de una tarifa en el momento actual.
+ * Este snapshot se guarda junto con el registro para mantener trazabilidad.
+ * 
+ * IMPORTANTE: Usar este snapshot garantiza que:
+ * 1. Cambios futuros en tarifas NO afectan registros históricos
+ * 2. Se puede auditar qué tarifa exacta se usó
+ * 3. Al editar un registro, se puede recalcular con la tarifa actual si se desea
+ * 
+ * @param tarifa - La tarifa actual del sistema
+ * @returns TarifaSnapshot - Copia inmutable de la tarifa
+ */
+export function crearTarifaSnapshot(tarifa: Tarifa): TarifaSnapshot {
+  return {
+    tarifaId: tarifa.id,
+    codigo: tarifa.codigo,
+    concepto: tarifa.concepto,
+    importe: tarifa.importe,
+    unidad: tarifa.unidad,
+    vigenciaDesde: tarifa.vigenciaDesde,
+    capturadoAt: Timestamp.now(),
+  };
+}
+
+/**
+ * Calcula el importe usando el snapshot guardado (para reportes históricos)
+ * o la tarifa actual (para recálculo)
+ */
+export function calcularConSnapshot(
+  unidades: number,
+  snapshot?: TarifaSnapshot,
+  tarifaActual?: Tarifa
+): { importe: number; usandoSnapshot: boolean; tarifa: number } {
+  // Priorizar snapshot (datos históricos inmutables)
+  if (snapshot) {
+    return {
+      importe: unidades * snapshot.importe,
+      usandoSnapshot: true,
+      tarifa: snapshot.importe,
+    };
+  }
+  
+  // Si no hay snapshot, usar tarifa actual
+  if (tarifaActual) {
+    return {
+      importe: unidades * tarifaActual.importe,
+      usandoSnapshot: false,
+      tarifa: tarifaActual.importe,
+    };
+  }
+  
+  // Sin tarifa disponible
+  return {
+    importe: 0,
+    usandoSnapshot: false,
+    tarifa: 0,
+  };
+}
+
+/**
+ * Estructura de resultado de cálculo con información de tarifa
+ */
+export interface ResultadoCalculo {
+  unidades: number;           // Horas, km, días, etc.
+  tarifa: number;             // Tarifa aplicada
+  importe: number;            // unidades * tarifa
+  snapshot: TarifaSnapshot;   // Snapshot para guardar
+}
+
+/**
+ * Calcula horas extras guardando el snapshot de tarifa
+ * Esta es la función que debe usarse al CREAR/EDITAR un registro
+ */
+export function calcularHorasExtrasConSnapshot(
+  horas: number,
+  tipoDia: TipoDia,
+  tarifas: Tarifa[],
+  tarifasEspeciales?: Record<string, number>
+): ResultadoCalculo | null {
+  const tipoTarifa = obtenerTipoTarifaHoraExtra(tipoDia);
+  
+  // Buscar tarifa especial del usuario primero
+  const tarifaEspecial = tarifasEspeciales?.[tipoTarifa];
+  
+  // Buscar tarifa general
+  const tarifa = obtenerTarifaActiva(tarifas, tipoTarifa);
+  
+  if (!tarifa && !tarifaEspecial) {
+    return null;
+  }
+  
+  // Usar tarifa especial si existe, sino la general
+  const importeTarifa = tarifaEspecial ?? tarifa!.importe;
+  
+  // Crear snapshot (si hay tarifa del sistema)
+  const snapshot = tarifa ? crearTarifaSnapshot(tarifa) : {
+    tarifaId: 'especial',
+    codigo: tipoTarifa,
+    concepto: `Tarifa especial ${tipoTarifa}`,
+    importe: tarifaEspecial!,
+    unidad: 'hora' as const,
+    vigenciaDesde: Timestamp.now(),
+    capturadoAt: Timestamp.now(),
+  };
+  
+  return {
+    unidades: horas,
+    tarifa: importeTarifa,
+    importe: horas * importeTarifa,
+    snapshot,
+  };
+}
+
+/**
+ * Calcula kilometraje guardando el snapshot de tarifa
+ */
+export function calcularKilometrajeConSnapshot(
+  kilometros: number,
+  tarifas: Tarifa[],
+  vehiculo: 'propio' | 'empresa' = 'propio'
+): ResultadoCalculo | null {
+  const codigoTarifa: TipoTarifa = vehiculo === 'propio' ? 'KM_VEHICULO_PROPIO' : 'KM_VEHICULO_EMPRESA';
+  const tarifa = obtenerTarifaActiva(tarifas, codigoTarifa);
+  
+  if (!tarifa) {
+    return null;
+  }
+  
+  return {
+    unidades: kilometros,
+    tarifa: tarifa.importe,
+    importe: kilometros * tarifa.importe,
+    snapshot: crearTarifaSnapshot(tarifa),
+  };
+}
+
+/**
+ * Calcula dieta guardando el snapshot de tarifa
+ */
+export function calcularDietaConSnapshot(
+  tipo: 'completa' | 'media',
+  tarifas: Tarifa[]
+): ResultadoCalculo | null {
+  const codigoTarifa: TipoTarifa = tipo === 'completa' ? 'DIETA_COMPLETA' : 'DIETA_MEDIA';
+  const tarifa = obtenerTarifaActiva(tarifas, codigoTarifa);
+  
+  if (!tarifa) {
+    return null;
+  }
+  
+  return {
+    unidades: 1, // Una dieta
+    tarifa: tarifa.importe,
+    importe: tarifa.importe,
+    snapshot: crearTarifaSnapshot(tarifa),
+  };
+}
+
+/**
+ * Calcula nocturnidad guardando el snapshot de tarifa
+ */
+export function calcularNocturnidadConSnapshot(
+  horas: number,
+  tarifas: Tarifa[]
+): ResultadoCalculo | null {
+  const tarifa = obtenerTarifaActiva(tarifas, 'NOCTURNIDAD');
+  
+  if (!tarifa) {
+    return null;
+  }
+  
+  return {
+    unidades: horas,
+    tarifa: tarifa.importe,
+    importe: horas * tarifa.importe,
+    snapshot: crearTarifaSnapshot(tarifa),
   };
 }

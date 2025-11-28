@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Plus, Search, Edit, Trash2, FolderKanban, CheckCircle, XCircle, X, Loader2 } from 'lucide-react';
-import { useProyectos } from '@/hooks/useFirebase';
+import { useProyectos } from '@/hooks/queries/compat';
 import { toast } from 'sonner';
 
 interface ProyectoForm {

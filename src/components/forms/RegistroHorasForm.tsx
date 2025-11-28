@@ -82,7 +82,7 @@ export function RegistroHorasForm({
   
   // Calcular importe estimado
   useEffect(() => {
-    if (horaInicio && horaFin && tipoHora && userData?.tarifaId) {
+    if (horaInicio && horaFin && tipoHora) {
       // Usar tarifa por defecto para estimación
       const tarifaEjemplo = {
         laborable: 12.5,
@@ -103,7 +103,7 @@ export function RegistroHorasForm({
     } else {
       setImporteEstimado(0);
     }
-  }, [horaInicio, horaFin, tipoHora, userData?.tarifaId]);
+  }, [horaInicio, horaFin, tipoHora]);
   
   const handleFormSubmit = async (data: RegistroHorasInput) => {
     setIsSubmitting(true);

@@ -92,7 +92,21 @@ const MOCK_REGISTROS = [
   },
 ];
 
-type Registro = typeof MOCK_REGISTROS[0];
+// Tipo explícito para registros de horas con motivoRechazo opcional
+interface Registro {
+  id: string;
+  fecha: string;
+  horaInicio: string;
+  horaFin: string;
+  horasExtras: number;
+  tipoHora: TipoHora;
+  proyectoId: string;
+  proyectoNombre: string;
+  importeEstimado: number;
+  estadoHorasExtras: EstadoAprobacion;
+  descripcion: string;
+  motivoRechazo?: string; // Opcional - solo presente cuando está rechazado
+}
 
 export default function RegistrosHorasPage() {
   const { userData } = useAuth();
@@ -150,9 +164,13 @@ export default function RegistrosHorasPage() {
       ));
     } else {
       // Crear nuevo
-      const nuevoRegistro = {
+      const nuevoRegistro: Registro = {
         id: Date.now().toString(),
-        ...data,
+        fecha: data.fecha,
+        horaInicio: data.horaInicio,
+        horaFin: data.horaFin,
+        proyectoId: data.proyectoId,
+        tipoHora: data.tipoHora || 'laborable',
         horasExtras: 3, // Calcular desde horaInicio y horaFin
         proyectoNombre: MOCK_PROYECTOS.find(p => p.id === data.proyectoId)?.nombre || '',
         importeEstimado: 45,
@@ -426,10 +444,10 @@ function RegistroCard({ registro, onEditar, onEnviar, onEliminar }: RegistroCard
           )}
           
           {/* Motivo de rechazo */}
-          {registro.estadoHorasExtras === 'rechazado' && (registro as any).motivoRechazo && (
+          {registro.estadoHorasExtras === 'rechazado' && registro.motivoRechazo && (
             <div className="mt-2 p-2 bg-red-50 rounded-lg text-sm text-red-600">
               <AlertCircle className="w-4 h-4 inline mr-1" />
-              {(registro as any).motivoRechazo}
+              {registro.motivoRechazo}
             </div>
           )}
           

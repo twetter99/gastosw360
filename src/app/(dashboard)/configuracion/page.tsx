@@ -105,7 +105,12 @@ export default function ConfiguracionPage() {
 
 // Componente de configuración de tarifas
 function TarifasConfig() {
-  const [tarifas, setTarifas] = useState(TARIFAS_POR_DEFECTO);
+  // Convertir el Record a un array con el código incluido
+  const tarifasArray = Object.entries(TARIFAS_POR_DEFECTO).map(([codigo, tarifa]) => ({
+    codigo,
+    ...tarifa,
+  }));
+  const [tarifas, setTarifas] = useState(tarifasArray);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   
@@ -138,7 +143,7 @@ function TarifasConfig() {
           <thead>
             <tr className="border-b border-gray-200">
               <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Concepto</th>
-              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Descripción</th>
+              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase">Código</th>
               <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase">Importe</th>
               <th className="text-center py-3 px-4 text-xs font-medium text-gray-500 uppercase">Unidad</th>
               <th className="w-20"></th>
@@ -150,7 +155,7 @@ function TarifasConfig() {
                 <td className="py-3 px-4">
                   <span className="font-medium text-gray-900">{tarifa.concepto}</span>
                 </td>
-                <td className="py-3 px-4 text-sm text-gray-600">{tarifa.descripcion}</td>
+                <td className="py-3 px-4 text-sm text-gray-600">{tarifa.codigo}</td>
                 <td className="py-3 px-4 text-right">
                   {editingId === tarifa.codigo ? (
                     <input

@@ -128,13 +128,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   className="flex items-center gap-3 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center text-sm font-medium">
-                    {obtenerIniciales(userData.nombre, userData.apellidos)}
+                    {obtenerIniciales(userData?.nombre || '', userData?.apellidos || '')}
                   </div>
                   <div className="hidden sm:block text-left">
                     <p className="text-sm font-medium text-gray-900">
-                      {userData.nombre} {userData.apellidos}
+                      {userData?.nombre} {userData?.apellidos}
                     </p>
-                    <p className="text-xs text-gray-500">{formatearRol(userData.rol)}</p>
+                    <p className="text-xs text-gray-500">{formatearRol(userData?.rol || 'tecnico')}</p>
                   </div>
                   <ChevronDown className="w-4 h-4 text-gray-500" />
                 </button>

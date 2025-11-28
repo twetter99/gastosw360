@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import imageCompression from 'browser-image-compression';
 import { 
   Calendar,
   Receipt,
@@ -69,6 +70,7 @@ export function GastoForm({
   const { userData } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [adjuntos, setAdjuntos] = useState<File[]>([]);
+  const [comprimiendo, setComprimiendo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const {
@@ -101,22 +103,77 @@ export function GastoForm({
   const TARIFA_KM = 0.26; // €/km por defecto
   const importeKmCalculado = esKilometraje && kilometros ? kilometros * TARIFA_KM : 0;
   
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Opciones de compresión de imágenes
+   * - maxSizeMB: 0.5 = 500KB máximo (optimiza almacenamiento y tiempo de carga)
+   * - maxWidthOrHeight: 1920px (suficiente para visualización y verificación)
+   * - useWebWorker: true (no bloquea la UI durante la compresión)
+   */
+  const compressionOptions = {
+    maxSizeMB: 0.5,
+    maxWidthOrHeight: 1920,
+    useWebWorker: true,
+    fileType: 'image/jpeg' as const,
+  };
+  
+  /**
+   * Comprime una imagen si es necesario
+   */
+  const comprimirImagen = async (file: File): Promise<File> => {
+    // Solo comprimir imágenes (no PDFs)
+    if (!file.type.startsWith('image/')) {
+      return file;
+    }
+    
+    // Si ya es pequeña (< 500KB), no comprimir
+    if (file.size <= 500 * 1024) {
+      return file;
+    }
+    
+    try {
+      const compressedFile = await imageCompression(file, compressionOptions);
+      console.log(`Imagen comprimida: ${(file.size / 1024).toFixed(0)}KB → ${(compressedFile.size / 1024).toFixed(0)}KB`);
+      return compressedFile;
+    } catch (error) {
+      console.error('Error al comprimir imagen:', error);
+      return file; // Si falla, usar original
+    }
+  };
+  
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+    
+    // Validar tipos (imágenes y PDFs)
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'application/pdf'];
     const validFiles = files.filter(file => {
-      // Validar tipo (imágenes y PDFs)
-      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
       if (!validTypes.includes(file.type)) {
         return false;
       }
-      // Validar tamaño (máx 5MB)
-      if (file.size > 5 * 1024 * 1024) {
+      // Validar tamaño original (máx 10MB para dar margen a la compresión)
+      if (file.size > 10 * 1024 * 1024) {
         return false;
       }
       return true;
     });
     
-    setAdjuntos(prev => [...prev, ...validFiles].slice(0, 3)); // Máx 3 adjuntos
+    if (validFiles.length === 0) return;
+    
+    // Comprimir imágenes antes de añadir
+    setComprimiendo(true);
+    try {
+      const processedFiles = await Promise.all(
+        validFiles.map(file => comprimirImagen(file))
+      );
+      
+      setAdjuntos(prev => [...prev, ...processedFiles].slice(0, 3)); // Máx 3 adjuntos
+    } finally {
+      setComprimiendo(false);
+    }
+    
+    // Limpiar input para permitir seleccionar el mismo archivo de nuevo
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
   
   const removeAdjunto = (index: number) => {
@@ -397,22 +454,37 @@ export function GastoForm({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-primary hover:text-primary transition-colors"
+            disabled={comprimiendo}
+            className={cn(
+              "w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed rounded-lg transition-colors",
+              comprimiendo 
+                ? "border-blue-300 bg-blue-50 text-blue-600 cursor-wait"
+                : "border-gray-300 text-gray-600 hover:border-primary hover:text-primary"
+            )}
           >
-            <Upload className="w-5 h-5" />
-            <span>Subir imagen o PDF (máx. 5MB)</span>
+            {comprimiendo ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Optimizando imagen...</span>
+              </>
+            ) : (
+              <>
+                <Upload className="w-5 h-5" />
+                <span>Subir imagen o PDF</span>
+              </>
+            )}
           </button>
         )}
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
+          accept="image/jpeg,image/png,image/webp,image/heic,application/pdf"
           multiple
           onChange={handleFileSelect}
           className="hidden"
         />
         <p className="mt-1 text-xs text-gray-500">
-          Máximo 3 archivos. Formatos: JPG, PNG, WebP, PDF
+          Máximo 3 archivos. Las imágenes se comprimen automáticamente. Formatos: JPG, PNG, WebP, HEIC, PDF
         </p>
       </div>
       
