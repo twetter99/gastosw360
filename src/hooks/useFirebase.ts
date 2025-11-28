@@ -9,7 +9,7 @@ import {
   tarifasService,
   festivosService,
   desplazamientosService,
-} from '@/lib/firebase/services';
+} from '@/lib/firebase/services.legacy';
 import { DocumentData } from 'firebase/firestore';
 import { toast } from 'sonner';
 
