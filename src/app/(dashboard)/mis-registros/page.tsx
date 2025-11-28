@@ -3,7 +3,6 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft,
   Clock,
   Receipt,
   Car,
@@ -20,6 +19,7 @@ import { NOMBRES_MESES } from '@/lib/utils/fechas';
 import { formatearMoneda, formatearHoras } from '@/lib/utils/formatters';
 import { cn } from '@/lib/utils';
 import { EstadoAprobacion } from '@/types';
+import TecnicoLayout from '@/components/layout/TecnicoLayout';
 
 // Mock data - en producción vendría de Firebase
 const MOCK_MIS_REGISTROS = {
@@ -99,20 +99,8 @@ export default function MisRegistrosPage() {
   ];
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      {/* Header con navegación */}
-      <div className="flex items-center gap-4 mb-6">
-        <Link
-          href="/dashboard"
-          className="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5 text-gray-600" />
-        </Link>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Mis registros</h1>
-          <p className="text-sm text-gray-500">{userData?.nombre}</p>
-        </div>
-      </div>
+    <TecnicoLayout title="Mis registros" showBack backHref="/dashboard">
+      <div className="max-w-2xl mx-auto px-4 py-4">
 
       {/* Selector de mes */}
       <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 p-3 mb-6">
@@ -275,5 +263,6 @@ export default function MisRegistrosPage() {
         )}
       </div>
     </div>
+    </TecnicoLayout>
   );
 }

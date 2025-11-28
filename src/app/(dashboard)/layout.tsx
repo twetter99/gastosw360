@@ -68,6 +68,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // Para técnicos: layout simplificado sin sidebar (el TecnicoLayout maneja todo)
+  if (userData?.rol === 'tecnico') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <OfflineIndicator />
+        <OfflineBadge />
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Indicador offline */}
