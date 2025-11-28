@@ -16,6 +16,7 @@ import { useAuth } from '@/lib/firebase/auth';
 import { getNavigationForRole, NAVIGATION } from '@/constants/navigation';
 import { formatearRol, obtenerIniciales } from '@/lib/utils/formatters';
 import { cn } from '@/lib/utils';
+import { OfflineIndicator, OfflineBadge } from '@/components/ui/OfflineIndicator';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -69,6 +70,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Indicador offline */}
+      <OfflineIndicator />
+      <OfflineBadge />
+      
       {/* Sidebar móvil */}
       <div 
         className={cn(

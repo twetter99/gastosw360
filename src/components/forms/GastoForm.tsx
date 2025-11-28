@@ -284,11 +284,12 @@ export function GastoForm({
               </label>
               <input
                 type="number"
+                inputMode="numeric"
                 step="1"
                 {...register('kilometros', { valueAsNumber: true })}
                 placeholder="0"
                 className={cn(
-                  "w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent",
+                  "w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-lg",
                   errors.kilometros ? "border-red-500" : "border-gray-300"
                 )}
               />
@@ -354,11 +355,12 @@ export function GastoForm({
             <Euro className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="number"
+              inputMode="decimal"
               step="0.01"
               {...register('importe', { valueAsNumber: true })}
               placeholder="0.00"
               className={cn(
-                "w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent",
+                "w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-lg font-medium",
                 errors.importe ? "border-red-500" : "border-gray-300"
               )}
             />

@@ -1,6 +1,12 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  Firestore, 
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  CACHE_SIZE_UNLIMITED 
+} from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { getFunctions, Functions } from 'firebase/functions';
 
@@ -23,13 +29,23 @@ let functions: Functions;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = getFirestore(app);
+  
+  // Firestore con persistencia offline
+  // Permite trabajar sin conexión y sincronizar al reconectar
+  db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+      cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+    }),
+  });
+  
   storage = getStorage(app);
-  functions = getFunctions(app, 'us-central1'); // Región de las Cloud Functions
+  functions = getFunctions(app, 'us-central1');
 } else {
   app = getApps()[0];
   auth = getAuth(app);
-  db = getFirestore(app);
+  // En hot reload, Firestore ya está inicializado
+  db = initializeFirestore(app, {});
   storage = getStorage(app);
   functions = getFunctions(app, 'us-central1');
 }
