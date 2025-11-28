@@ -167,8 +167,15 @@ export const calcularImporteKilometraje = functions.firestore
   .onWrite(async (change, context) => {
     if (!change.after.exists) return null;
     
-    const gasto = change.after.data();
+    const gasto = change.after.data() as {
+      categoria: string;
+      kilometros?: number;
+      importeCalculado?: number;
+      fecha: admin.firestore.Timestamp;
+    } | undefined;
     const gastoId = context.params.gastoId;
+    
+    if (!gasto) return null;
     
     // Solo procesar gastos de kilometraje
     if (gasto.categoria !== 'kilometraje') return null;
@@ -177,7 +184,7 @@ export const calcularImporteKilometraje = functions.firestore
     if (!gasto.kilometros || gasto.kilometros <= 0) return null;
     
     // Verificar si necesita recalcular
-    const before = change.before.exists ? change.before.data() : null;
+    const before = change.before.exists ? change.before.data() as { kilometros?: number } : null;
     if (before && before.kilometros === gasto.kilometros && gasto.importeCalculado) {
       return null;
     }
