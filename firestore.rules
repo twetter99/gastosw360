@@ -1,0 +1,210 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================
+    // FUNCIONES HELPER
+    // ============================================================
+    
+    // Verifica si el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Obtiene el documento del usuario actual
+    function getUserData() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+    
+    // Verifica el rol del usuario
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().rol == role;
+    }
+    
+    // Verifica si tiene alguno de los roles
+    function hasAnyRole(roles) {
+      return isAuthenticated() && getUserData().rol in roles;
+    }
+    
+    // Verifica si es admin o dirección
+    function isAdminOrDireccion() {
+      return hasAnyRole(['admin', 'direccion']);
+    }
+    
+    // Verifica si puede aprobar horas de un usuario
+    function canApproveHoursFor(userId) {
+      let userData = getUserData();
+      let targetUser = get(/databases/$(database)/documents/usuarios/$(userId)).data;
+      return userData.id == targetUser.responsableHorasId || isAdminOrDireccion();
+    }
+    
+    // Verifica si puede aprobar gastos
+    function canApproveExpenses() {
+      return hasAnyRole(['supervisor_oficina', 'direccion', 'admin']);
+    }
+    
+    // Verifica si es el propietario del recurso
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Verifica si el usuario está en el equipo del jefe
+    function isInMyTeam(userId) {
+      let userData = getUserData();
+      return hasRole('jefe_equipo') && userId in userData.equipoIds;
+    }
+    
+    // ============================================================
+    // USUARIOS
+    // ============================================================
+    
+    match /usuarios/{userId} {
+      // Lectura: autenticados pueden leer usuarios activos
+      allow read: if isAuthenticated();
+      
+      // Escritura: solo admin puede crear/editar usuarios
+      allow create, update: if hasAnyRole(['admin', 'direccion']);
+      
+      // Eliminar: solo admin
+      allow delete: if hasRole('admin');
+    }
+    
+    // ============================================================
+    // REGISTROS DE HORAS
+    // ============================================================
+    
+    match /registrosHoras/{registroId} {
+      // Lectura:
+      // - Propietario puede ver los suyos
+      // - Jefe de equipo puede ver los de su equipo
+      // - Supervisor/Dirección/Admin pueden ver todos
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.usuarioId) ||
+        isInMyTeam(resource.data.usuarioId) ||
+        isAdminOrDireccion() ||
+        hasRole('supervisor_oficina')
+      );
+      
+      // Crear: cualquier usuario autenticado puede crear sus propios registros
+      allow create: if isAuthenticated() && 
+        request.resource.data.usuarioId == request.auth.uid;
+      
+      // Actualizar:
+      // - Propietario puede editar si está en borrador
+      // - Aprobador puede aprobar/rechazar
+      allow update: if isAuthenticated() && (
+        // Propietario puede editar borradores
+        (isOwner(resource.data.usuarioId) && resource.data.estadoHorasExtras == 'borrador') ||
+        // Aprobador puede cambiar estado
+        canApproveHoursFor(resource.data.usuarioId)
+      );
+      
+      // Eliminar: solo propietario si está en borrador
+      allow delete: if isOwner(resource.data.usuarioId) && 
+        resource.data.estadoHorasExtras == 'borrador';
+    }
+    
+    // ============================================================
+    // GASTOS
+    // ============================================================
+    
+    match /gastos/{gastoId} {
+      // Lectura:
+      // - Propietario puede ver los suyos
+      // - Supervisor/Dirección/Admin pueden ver todos
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.usuarioId) ||
+        canApproveExpenses()
+      );
+      
+      // Crear: cualquier usuario autenticado puede crear sus propios gastos
+      allow create: if isAuthenticated() && 
+        request.resource.data.usuarioId == request.auth.uid;
+      
+      // Actualizar:
+      // - Propietario puede editar si está en borrador
+      // - Supervisor puede aprobar/rechazar
+      allow update: if isAuthenticated() && (
+        (isOwner(resource.data.usuarioId) && resource.data.estadoGasto == 'borrador') ||
+        canApproveExpenses()
+      );
+      
+      // Eliminar: solo propietario si está en borrador
+      allow delete: if isOwner(resource.data.usuarioId) && 
+        resource.data.estadoGasto == 'borrador';
+    }
+    
+    // ============================================================
+    // DESPLAZAMIENTOS
+    // ============================================================
+    
+    match /desplazamientos/{desplazamientoId} {
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.usuarioId) ||
+        isAdminOrDireccion() ||
+        hasRole('supervisor_oficina')
+      );
+      
+      allow create: if isAuthenticated() && 
+        request.resource.data.usuarioId == request.auth.uid;
+      
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.usuarioId) ||
+        isAdminOrDireccion()
+      );
+      
+      allow delete: if isOwner(resource.data.usuarioId) || isAdminOrDireccion();
+    }
+    
+    // ============================================================
+    // CONFIGURACIÓN (TARIFAS, PROYECTOS, FESTIVOS)
+    // ============================================================
+    
+    match /tarifas/{tarifaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrDireccion();
+    }
+    
+    match /proyectos/{proyectoId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAnyRole(['admin', 'direccion', 'supervisor_oficina']);
+    }
+    
+    match /festivos/{festivoId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdminOrDireccion();
+    }
+    
+    // ============================================================
+    // RESÚMENES Y KPIS (Solo lectura, se generan por Cloud Functions)
+    // ============================================================
+    
+    match /resumenesMensuales/{resumenId} {
+      allow read: if isAuthenticated() && (
+        // Propietario puede ver su resumen
+        resource.data.usuarioId == request.auth.uid ||
+        // Jefe puede ver resúmenes de su equipo
+        isInMyTeam(resource.data.usuarioId) ||
+        // Supervisor/Dirección/Admin pueden ver todos
+        hasAnyRole(['supervisor_oficina', 'direccion', 'admin'])
+      );
+      
+      // Solo Cloud Functions puede escribir
+      allow write: if false;
+    }
+    
+    match /kpis/{kpiId} {
+      allow read: if hasAnyRole(['supervisor_oficina', 'direccion', 'admin']);
+      allow write: if false;
+    }
+    
+    // ============================================================
+    // APROBACIONES PENDIENTES (Contador por aprobador)
+    // ============================================================
+    
+    match /aprobacionesPendientes/{aprobadorId} {
+      allow read: if isAuthenticated() && request.auth.uid == aprobadorId;
+      allow write: if false;
+    }
+  }
+}
