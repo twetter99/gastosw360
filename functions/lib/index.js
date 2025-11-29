@@ -44,7 +44,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.recalcularTodosLosImportes = exports.calcularImporteKilometraje = exports.calcularImporteHoras = exports.syncMyCustomClaims = exports.refreshCustomClaims = exports.onUserUpdated = exports.onUserCreated = void 0;
+exports.forceAdminClaims = exports.recalcularTodosLosImportes = exports.calcularImporteKilometraje = exports.calcularImporteHoras = exports.syncMyCustomClaims = exports.refreshCustomClaims = exports.onUserUpdated = exports.onUserCreated = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
@@ -377,5 +377,21 @@ exports.recalcularTodosLosImportes = functions.https.onCall(async (data, context
         success: true,
         horasActualizadas,
     };
+});
+/**
+ * HTTP: Forzar claims de admin (temporal - eliminar después)
+ */
+exports.forceAdminClaims = functions.https.onRequest(async (req, res) => {
+    const uid = 'fVfIYUwwVMPbFS5U9Y3fkYw46h63';
+    try {
+        await admin.auth().setCustomUserClaims(uid, { rol: 'admin' });
+        await db.collection('usuarios').doc(uid).update({
+            claimsActualizados: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        res.json({ success: true, message: 'Claims de admin establecidos. Cierra sesión y entra de nuevo.' });
+    }
+    catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 //# sourceMappingURL=index.js.map

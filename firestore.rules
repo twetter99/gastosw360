@@ -252,5 +252,17 @@ service cloud.firestore {
       allow read: if isAuthenticated() && request.auth.uid == aprobadorId;
       allow write: if false;
     }
+    
+    // ============================================================
+    // CONFIGURACIÓN DEL SISTEMA (Tarifas, festivos, etc.)
+    // ============================================================
+    
+    match /configuracion/{document=**} {
+      // Todos los autenticados pueden leer configuración
+      allow read: if isAuthenticated();
+      
+      // Solo admin y dirección pueden modificar configuración
+      allow write: if hasAnyRole(['admin', 'direccion']);
+    }
   }
 }

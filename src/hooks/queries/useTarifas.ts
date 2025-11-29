@@ -3,7 +3,13 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { tarifasService, type CreateTarifaInput, type TarifaDB } from '@/lib/firebase/services/tarifas';
+import { 
+  tarifasService, 
+  type CreateTarifaInput, 
+  type TarifaDB,
+  type TarifaAnual,
+  type TarifasAnuales 
+} from '@/lib/firebase/services/tarifas';
 import { TipoTarifa } from '@/types';
 
 // ============================================
@@ -16,6 +22,10 @@ export const tarifasKeys = {
   activas: () => [...tarifasKeys.lists(), { activa: true }] as const,
   byCodigo: (codigo: TipoTarifa) => [...tarifasKeys.lists(), { codigo }] as const,
   detail: (id: string) => [...tarifasKeys.all, 'detail', id] as const,
+  // Claves para tarifas anuales
+  anuales: () => [...tarifasKeys.all, 'anuales'] as const,
+  porAño: (año: number) => [...tarifasKeys.anuales(), { año }] as const,
+  añosConfigurados: () => [...tarifasKeys.anuales(), 'años'] as const,
 };
 
 // ============================================
@@ -126,5 +136,78 @@ export function useDesactivarTarifa() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: tarifasKeys.all });
     },
+  });
+}
+
+// ============================================
+// HOOKS PARA TARIFAS ANUALES
+// ============================================
+
+/**
+ * Obtener tarifas de un año específico
+ */
+export function useTarifasAño(año: number) {
+  return useQuery({
+    queryKey: tarifasKeys.porAño(año),
+    queryFn: () => tarifasService.getTarifasAño(año),
+    staleTime: 1000 * 60 * 30, // 30 minutos
+  });
+}
+
+/**
+ * Obtener lista de años configurados
+ */
+export function useAñosConfigurados() {
+  return useQuery({
+    queryKey: tarifasKeys.añosConfigurados(),
+    queryFn: () => tarifasService.getAñosConfigurados(),
+    staleTime: 1000 * 60 * 30,
+  });
+}
+
+/**
+ * Guardar tarifas de un año
+ */
+export function useGuardarTarifasAño() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ año, tarifas, userId }: { 
+      año: number; 
+      tarifas: Record<TipoTarifa, TarifaAnual>;
+      userId?: string;
+    }) => tarifasService.guardarTarifasAño(año, tarifas, userId),
+    onSuccess: (_, { año }) => {
+      queryClient.invalidateQueries({ queryKey: tarifasKeys.porAño(año) });
+      queryClient.invalidateQueries({ queryKey: tarifasKeys.añosConfigurados() });
+    },
+  });
+}
+
+/**
+ * Clonar tarifas del año anterior
+ */
+export function useClonarTarifasAño() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ añoDestino, userId }: { añoDestino: number; userId?: string }) => 
+      tarifasService.clonarDelAñoAnterior(añoDestino, userId),
+    onSuccess: (_, { añoDestino }) => {
+      queryClient.invalidateQueries({ queryKey: tarifasKeys.porAño(añoDestino) });
+      queryClient.invalidateQueries({ queryKey: tarifasKeys.añosConfigurados() });
+    },
+  });
+}
+
+/**
+ * Obtener tarifa vigente anual
+ */
+export function useTarifaVigenteAnual(codigo: TipoTarifa | undefined, fecha?: Date) {
+  return useQuery({
+    queryKey: [...tarifasKeys.byCodigo(codigo!), 'vigente', fecha?.toISOString()],
+    queryFn: () => tarifasService.getTarifaVigenteAnual(codigo!, fecha),
+    enabled: !!codigo,
+    staleTime: 1000 * 60 * 30,
   });
 }

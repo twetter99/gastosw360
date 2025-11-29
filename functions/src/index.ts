@@ -448,3 +448,7 @@ export const recalcularTodosLosImportes = functions.https.onCall(async (data, co
     horasActualizadas,
   };
 });
+
+
+
+
